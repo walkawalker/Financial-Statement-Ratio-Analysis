@@ -1,0 +1,371 @@
+---
+title: "R_Hw4_Code"
+author: "Walker Hills"
+date: "9/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(corrplot)
+library(Hmisc)
+library(psych)
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+library(readxl)
+library(plotly)
+library(scales)
+library(fredr)
+library(broom)
+library(treasuryTR)
+library(modeltime)
+library(tidymodels)
+library(ppsr)
+library(fredr)
+library(Quandl)
+library(riingo)
+#library(pwiser)
+library(config)
+library(here)
+library(httr)
+library(jsonlite)
+library(patchwork)
+library(cowplot)
+library(gt)
+#library(webshot2) 
+library(english)
+library(gtsummary)
+library(vtable)
+library(quantmod)
+library(reshape2)
+library(BBmisc)
+library(haven)
+```
+
+```{r column names}
+npt <- "C:/Users/whills3/Documents/R_Hw4/summarystats"
+summarystatsfunc <- function(dtn, filestring, year){
+  dtn%>%
+    filter(dtn$fyear == year)%>%
+    select(-fyear)%>%
+    st(out = 'png',file = str_glue(npt, filestring, ".png"))
+}
+```
+```{r cars}
+#path <- here::here()
+sampledata <- read_sas("funda.sas7bdat") %>%
+  select('gvkey', 'datadate', 'fyear', 'scf', 'sich', 'ch', 'ivst', 'rect', 'invt', 'aco', 'act', 'ppent', 'ivaeq', 'ivao', 'intan', 'ao', 'at', 'dlc', 'ap', 'txp', 'lco', 'lct', 'dltt', 'lo', 'txditc', 'mib', 'lt', 'pstk', 'ceq', 'teq', 'lse', 'dv', 'capx', 'ivch', 'aqc', 'fuseo', 'sppe', 'siv', 'ivstch', 'ivaco', 'wcapc', 'chech', 'dlcch', 'recch', 'invch', 'apalch', 'txach', 'aoloch', 'fiao', 'ibc', 'xidoc', 'dpc', 'txdc', 'esubc', 'sppiv', 'fopo', 'fsrco', 'exre', 'dltis', 'dltr', 'sstk', 'prstkc', 'mkvalt', 'ni', 'sale', 'indfmt', 'datafmt', 'popsrc', 'consol', 'cogs', 'xsga', 'oibdp', 'dp', 'oiadp','xint', 'nopi', 'spi', 'pi', 'txt', 'mii', 'ib', 'dvp', 'cstke', 'xido', 'ni', 'ibc', 'dpc', 'fopt', 'oancf', 'ivncf', 'fincf','fsrco', 'che')
+  
+  
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+testdata <- sampledata %>%
+  filter(fyear == 1971 | fyear == 1974 | fyear == 1979 | fyear == 1984 | fyear == 1988 | fyear == 1990 | fyear == 1995 | fyear == 1999 | fyear == 2002 | fyear == 2005 | fyear == 2008 | fyear == 2011 | fyear == 2014 | fyear == 2017 | fyear == 2020) %>%
+  filter(indfmt=='INDL', datafmt == 'STD', popsrc=='D', consol=='C')%>%
+   filter((at-lct)!=0 & (dltt+dlc+teq) !=0 & sale>0 & at!=0)%>%
+  filter((sich > 6000 | sich < 6999) & (sich > 4900 | sich < 4999) | is.na(sich))%>%
+  filter(scf == 1 | scf == 2 | scf == 3 | scf == 7)%>%
+  mutate(investments = case_when(scf==1 | scf==2 | scf==3 ~capx+ivch+aqc+fuseo-sppe-siv,
+                           scf==7 ~capx+ivch+aqc-sppe-siv-ivstch-ivaco))%>%
+  mutate(changeWorkingCap = case_when(scf==1 ~wcapc+chech+dlcch, scf==2 | scf==3
+                                      ~ -wcapc+chech-dlcch, scf==7
+                                    ~-recch-invch-apalch-txach-aoloch+chech-fiao-dlcch))%>%
+  mutate(internalcashflow = case_when(scf==1 | scf==2 | scf==3
+                                      ~ibc+xidoc+dpc+txdc+esubc+sppiv+fopo+fsrco, scf==7
+                                      ~ibc+xidoc+dpc+txdc+esubc+sppiv+fopo+exre))%>%
+  mutate(financingdeficit = dv+investments+changeWorkingCap+internalcashflow,
+         netdebtissues = dltis + dltr, 
+         netequityissues = sstk + prstkc, 
+         netexternalfinancing = netdebtissues + netequityissues,
+         nopispi = nopi + spi,
+         otherfundsfromoperation = xidoc+txdc+esubc+sppiv+fopo,
+         shortterminvestchange = ivstch+ivaco, 
+         bvofdebt = dlc+dltt, 
+         netdebtissued = dltis - dltr,
+         netequityissued = sstk - prstkc,
+         totalnetextfinancing = netdebtissued + netequityissued)%>%
+  mutate(dvna = dv/(at-lct),
+         invna = investments/(at-lct),
+         wcna = changeWorkingCap/(at-lct),
+         incfna = internalcashflow/(at-lct),
+         fdna = financingdeficit/(at-lct),
+         gdna = dltis/(at-lct),
+         ndina = netdebtissues/(at-lct),
+         neina = netequityissues/(at-lct),
+         nefna = netexternalfinancing/(at-lct),
+         cmldna = dlc/(at-lct),
+         cltdat = netdebtissues/at,
+         ltdat = dltt/at,
+         booklev = (dltt+dlc)/(dltt+dlc+teq),
+         tangibility = ppent/at,
+         mvofa = mkvalt/at,
+         logsales = log(sale),
+         profitability = ni/at, 
+         current = act/lct,
+         quick = (che+rect)/lct, 
+         dtoe = lt/teq,
+         intburden = (oiadp-xint)/oiadp,
+         intcoverage = oiadp/xint, 
+         leverage = at/teq, 
+         returnsales = oiadp/sale)
+```
+```{r get tables}
+
+table_10 <- testdata%>%
+  select(fyear,dvna,invna,wcna,incfna, fdna, gdna, ndina, neina, nefna, ltdat, tangibility, mvofa, logsales, profitability)
+table_1 <- testdata%>%
+  select(fyear, ch, ivst, rect, invt, aco, act, ppent, ivaeq, ivao, intan, ao, at, dlc, ap, txp, lco, lct, dltt, lo, txditc, mib, lt, pstk, ceq, teq)
+table_2<- testdata%>%
+  select(fyear, dv, investments, changeWorkingCap,internalcashflow, financingdeficit, netdebtissues, netequityissues, netexternalfinancing)
+table_8 <- testdata%>%
+  select(fyear, sale, cogs,xsga,oibdp,dp,oiadp,xint, nopispi, pi, txt, mii, ib, dvp, cstke, xido, ni, ibc, dpc, fopt, recch, invch, apalch, txach, aoloch, oancf, ivch, siv, capx, sppe, aqc, shortterminvestchange, ivncf, sstk, prstkc, dv, dltis, dltr, dlcch, fiao, fincf, exre, chech, fsrco, fuseo, wcapc)
+table_9 <- testdata%>%
+  select(fyear, at, sale, bvofdebt, dv, investments, changeWorkingCap, internalcashflow, financingdeficit, dltis, dltr, netdebtissued, sstk, prstkc, netequityissued,totalnetextfinancing, invna,wcna,incfna, fdna, gdna, ndina, neina, nefna, cmldna, ltdat, cltdat, booklev, tangibility, mvofa, profitability)
+additionalratio <- testdata%>%
+  select(fyear, current, quick, intburden, intcoverage, leverage, returnsales)
+```
+```{r make corrmatrix and plot}
+corrmatrix <- table_10%>%
+  select(-fyear)%>%
+  na.omit()%>%
+  cor()
+corrmatrix%>%
+corrplot(type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+```
+```{r boxplot call}
+pdf(file = "boxplotstable10.pdf", onefile = TRUE, paper = "a4r")
+boxplot_func(table_10, c(-0.1,0.1), "Cash Divdends/Net Assets over Time", with(table_10%>%select(dvna)%>%na.omit(), dvna), 2)
+boxplot_func(table_10, c(-1,1), "Investment/Net Assets over Time", with(table_10%>%select(invna)%>%na.omit(), invna), 3)
+boxplot_func(table_10, c(-1,1), "Changing Working capital/Net Assets over Time", with(table_10%>%select(wcna)%>%na.omit(), wcna), 4)
+boxplot_func(table_10, c(-1,1), "Internal cash flow/Net Assets over Time", with(table_10%>%select(incfna)%>%na.omit(), incfna), 5)
+boxplot_func(table_10, c(-1,1), "Financing deficit/Net Assets over Time", with(table_10%>%select(fdna)%>%na.omit(), fdna), 6)
+boxplot_func(table_10, c(-0.25,0.25), "Gross LT debt issued/Net Assets over Time", with(table_10%>%select(gdna)%>%na.omit(), gdna), 7)
+boxplot_func(table_10, c(-0.5,0.5), "Net LT debt issued/Net Assets over Time", with(table_10%>%select(ndina)%>%na.omit(), ndina), 8)
+boxplot_func(table_10, c(-0.1,0.1), "Net Equity issued/Net Assets over Time", with(table_10%>%select(neina)%>%na.omit(), neina), 9)
+boxplot_func(table_10, c(-1,1), "Net external financing/Net Assets over Time", with(table_10%>%select(nefna)%>%na.omit(), nefna), 10)
+boxplot_func(table_10, c(-2,2), "Total debt/book capitalization over Time", with(table_10%>%select(ltdat)%>%na.omit(), ltdat), 11)
+boxplot_func(table_10, c(-1,1), "Tangibility over Time", with(table_10%>%select(tangibility)%>%na.omit(), tangibility), 12)
+boxplot_func(table_10, c(-3,3), "Market/book assets over Time", with(table_10%>%select(mvofa)%>%na.omit(), mvofa), 13)
+boxplot_func(table_10, c(-10,10), "Log Sales over Time", with(table_10%>%select(logsales)%>%na.omit(), logsales), 14)
+boxplot_func(table_10, c(-0.5,0.5), "Profitability over Time", with(table_10%>%select(profitability)%>%na.omit(), profitability), 15)
+dev.off()
+```
+```{r boxplot func}
+boxplot_func <- function(dt, sc, title, colname, colnum){
+  dt%>%
+    select(1,colnum)%>%
+    na.omit()%>%
+    mutate(fyear = as.character(fyear))%>%
+    ggplot(aes(x=fyear, y=colname, group=fyear))+
+    geom_boxplot()+
+    scale_y_continuous(limits = sc)+
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.line = element_line(colour = "blue"),
+          axis.text.x = element_text(angle = 45))+
+    labs(title = title)+
+         xlab("Years")+
+         ylab("")
+  
+}
+boxplot_indicators <- function(dt, dt2, sc, title, colname, dv, axist){
+ temp <- 
+   left_join(dt, dt2, by = "fyear")%>%
+   select(fyear, colname, 16) %>%
+   na.omit() %>% 
+   rename(test =3)%>%
+   mutate(test = test/dv)
+
+ print(
+   temp%>%
+    ggplot(aes(x=fyear, y=temp[[2]], group=fyear))+
+    geom_boxplot()+
+     geom_line(data=temp, aes(x=fyear, y=temp[[3]], group = 1, color = "red"))+
+    scale_y_continuous(limits = sc, sec.axis = sec_axis(trans = ~.*dv, name = axist))+
+    theme(plot.title = element_text(hjust = 0.5),
+          axis.line = element_line(colour = "blue"),
+          axis.text.x = element_text(angle = 45),
+          legend.position = "bottom")+
+    labs(title = title, color = axist)+
+         xlab("Years")+
+         ylab("")
+ )
+}
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r summary stats}
+summarystatsfunc(table_10, "/1971summarystatst10", 1971)
+summarystatsfunc(table_10, "/1974summarystatst10", 1974)
+summarystatsfunc(table_10, "/1979summarystatst10", 1979)
+summarystatsfunc(table_10, "/1984summarystatst10", 1984)
+summarystatsfunc(table_10, "/1988summarystatst10", 1988)
+summarystatsfunc(table_10, "/1990summarystatst10", 1990)
+summarystatsfunc(table_10, "/1995summarystatst10", 1995)
+summarystatsfunc(table_10, "/1999summarystatst10", 1999)
+summarystatsfunc(table_10, "/2002summarystatst10", 2002)
+summarystatsfunc(table_10, "/2005summarystatst10", 2005)
+summarystatsfunc(table_10, "/2011summarystatst10", 2011)
+summarystatsfunc(table_10, "/2014summarystatst10", 2014)
+summarystatsfunc(table_10, "/2017summarystatst10", 2017)
+summarystatsfunc(table_10, "/2020summarystatst10", 2020)
+
+summarystatsfunc(table_1, "/1971summarystatst1", 1971)
+summarystatsfunc(table_1, "/1974summarystatst1", 1974)
+summarystatsfunc(table_1, "/1979summarystatst1", 1979)
+summarystatsfunc(table_1, "/1984summarystatst1", 1984)
+summarystatsfunc(table_1, "/1988summarystatst1", 1988)
+summarystatsfunc(table_1, "/1990summarystatst1", 1990)
+summarystatsfunc(table_1, "/1995summarystatst1", 1995)
+summarystatsfunc(table_1, "/1999summarystatst1", 1999)
+summarystatsfunc(table_1, "/2002summarystatst1", 2002)
+summarystatsfunc(table_1, "/2005summarystatst1", 2005)
+summarystatsfunc(table_1, "/2011summarystatst1", 2011)
+summarystatsfunc(table_1, "/2014summarystatst1", 2014)
+summarystatsfunc(table_1, "/2017summarystatst1", 2017)
+summarystatsfunc(table_1, "/2020summarystatst1", 2020)
+
+summarystatsfunc(table_2, "/1971summarystatst2", 1971)
+summarystatsfunc(table_2, "/1974summarystatst2", 1974)
+summarystatsfunc(table_2, "/1979summarystatst2", 1979)
+summarystatsfunc(table_2, "/1984summarystatst2", 1984)
+summarystatsfunc(table_2, "/1988summarystatst2", 1988)
+summarystatsfunc(table_2, "/1990summarystatst2", 1990)
+summarystatsfunc(table_2, "/1995summarystatst2", 1995)
+summarystatsfunc(table_2, "/1999summarystatst2", 1999)
+summarystatsfunc(table_2, "/2002summarystatst2", 2002)
+summarystatsfunc(table_2, "/2005summarystatst2", 2005)
+summarystatsfunc(table_2, "/2011summarystatst2", 2011)
+summarystatsfunc(table_2, "/2014summarystatst2", 2014)
+summarystatsfunc(table_2, "/2017summarystatst2", 2017)
+summarystatsfunc(table_2, "/2020summarystatst2", 2020)
+
+summarystatsfunc(table_8, "/1971summarystatst8", 1971)
+summarystatsfunc(table_8, "/1974summarystatst8", 1974)
+summarystatsfunc(table_8, "/1979summarystatst8", 1979)
+summarystatsfunc(table_8, "/1984summarystatst8", 1984)
+summarystatsfunc(table_8, "/1988summarystatst8", 1988)
+summarystatsfunc(table_8, "/1990summarystatst8", 1990)
+summarystatsfunc(table_8, "/1995summarystatst8", 1995)
+summarystatsfunc(table_8, "/1999summarystatst8", 1999)
+summarystatsfunc(table_8, "/2002summarystatst8", 2002)
+summarystatsfunc(table_8, "/2005summarystatst8", 2005)
+summarystatsfunc(table_8, "/2011summarystatst8", 2011)
+summarystatsfunc(table_8, "/2014summarystatst8", 2014)
+summarystatsfunc(table_8, "/2017summarystatst8", 2017)
+summarystatsfunc(table_8, "/2020summarystatst8", 2020)
+
+summarystatsfunc(table_9, "/1971summarystatst9", 1971)
+summarystatsfunc(table_9, "/1974summarystatst9", 1974)
+summarystatsfunc(table_9, "/1979summarystatst9", 1979)
+summarystatsfunc(table_9, "/1984summarystatst9", 1984)
+summarystatsfunc(table_9, "/1988summarystatst9", 1988)
+summarystatsfunc(table_9, "/1990summarystatst9", 1990)
+summarystatsfunc(table_9, "/1995summarystatst9", 1995)
+summarystatsfunc(table_9, "/1999summarystatst9", 1999)
+summarystatsfunc(table_9, "/2002summarystatst9", 2002)
+summarystatsfunc(table_9, "/2005summarystatst9", 2005)
+summarystatsfunc(table_9, "/2011summarystatst9", 2011)
+summarystatsfunc(table_9, "/2014summarystatst9", 2014)
+summarystatsfunc(table_9, "/2017summarystatst9", 2017)
+summarystatsfunc(table_9, "/2020summarystatst9", 2020)
+
+summarystatsfunc(additionalratio, "/1971summarystatsAt", 1971)
+summarystatsfunc(additionalratio, "/1974summarystatsAt", 1974)
+summarystatsfunc(additionalratio, "/1979summarystatsAt", 1979)
+summarystatsfunc(additionalratio, "/1984summarystatsAt", 1984)
+summarystatsfunc(additionalratio, "/1988summarystatsAt", 1988)
+summarystatsfunc(additionalratio, "/1990summarystatsAt", 1990)
+summarystatsfunc(additionalratio, "/1995summarystatsAt", 1995)
+summarystatsfunc(additionalratio, "/1999summarystatsAt", 1999)
+summarystatsfunc(additionalratio, "/2002summarystatsAt", 2002)
+summarystatsfunc(additionalratio, "/2005summarystatsAt", 2005)
+summarystatsfunc(additionalratio, "/2011summarystatsAt", 2011)
+summarystatsfunc(additionalratio, "/2014summarystatsAt", 2014)
+summarystatsfunc(additionalratio, "/2017summarystatsAt", 2017)
+summarystatsfunc(additionalratio, "/2020summarystatsAt", 2020)
+```
+
+```{r get indicators data}
+fredr_set_key("934ff2bda973318f207c642650032b62")
+NBER_Rec_data <- tq_get("USREC", get = "economic.data", from = "1971-01-01")%>%
+  mutate(usrec = price, fyear = date)%>%
+  select(fyear, usrec)%>%
+  mutate(fyear = format(fyear, "%Y"))%>%
+  group_by(fyear)%>%
+  summarise(across(usrec, funs(max(., na.rm = TRUE))))%>%
+  mutate(fyear = as.numeric(fyear))%>%
+  filter(fyear == 1971 | fyear == 1974 | fyear == 1979 | fyear == 1984 | fyear == 1988 | fyear == 1990 | fyear == 1995 | fyear == 1999 | fyear == 2002 | fyear == 2005 | fyear == 2008 | fyear == 2011 | fyear == 2014 | fyear == 2017 | fyear == 2020)
+
+  
+
+BAA_CP_bonds <- tq_get("BAAFFM", get = "economic.data", from = "1971-01-01")%>%
+  mutate(BAAFFM = price, fyear = date)%>%
+  select(fyear, BAAFFM)%>%
+  mutate(fyear = format(fyear, "%Y"))%>%
+  group_by(fyear)%>%
+  summarise(across(BAAFFM, funs(mean(., na.rm = TRUE))))%>%
+  mutate(fyear = as.numeric(fyear))%>%
+  filter(fyear == 1971 | fyear == 1974 | fyear == 1979 | fyear == 1984 | fyear == 1988 | fyear == 1990 | fyear == 1995 | fyear == 1999 | fyear == 2002 | fyear == 2005 | fyear == 2008 | fyear == 2011 | fyear == 2014 | fyear == 2017 | fyear == 2020)
+
+
+KCFSI_data <- tq_get("KCFSI", get = "economic.data", from = "1971-01-01")%>%
+  mutate(KCFSI = price, fyear = date)%>%
+  select(fyear, KCFSI)%>%
+  mutate(fyear = format(fyear, "%Y"))%>%
+  group_by(fyear)%>%
+  summarise(across(KCFSI, funs(mean(., na.rm = TRUE))))%>%
+  mutate(fyear = as.numeric(fyear))%>%
+  filter(fyear == 1971 | fyear == 1974 | fyear == 1979 | fyear == 1984 | fyear == 1988 | fyear == 1990 | fyear == 1995 | fyear == 1999 | fyear == 2002 | fyear == 2005 | fyear == 2008 | fyear == 2011 | fyear == 2014 | fyear == 2017 | fyear == 2020)
+```
+
+```{r plot indicators and table10}
+pdf(file = "boxplotstable10withindicators.pdf", onefile = TRUE, paper = "a4r")
+boxplot_indicators(table_10, NBER_Rec_data, c(-0.05,0.1), "Cash Divdends/Net Assets vs USREC", 2, 10, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds, c(-0.05,0.1), "Cash Divdends/Net Assets vs BAAFFM", 2, 62, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-0.05,0.1), "Cash Divdends/Net Assets vs KCFSI", 2, 50, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Investment/Net Assets vs USREC", 3, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds, c(-1,1), "Investment/Net Assets vs BAAFFM", 3, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-1,1), "Investment/Net Assets vs KCFSI", 3, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Changing Working capital/Net Assets vs USREC", 4, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-1,1), "Changing Working capital/Net Assets vs BAAFFM", 4, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-1,1), "Changing Working capital/Net Assets vs KCFSI", 4, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Internal cash flow/Net Assets vs USREC", 5, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-1,1), "Internal cash flow/Net Assets vs BAAFFM", 5, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-1,1), "Internal cash flow/Net Assets vs KCFSI", 5, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Financing deficit/Net Assets vs USREC", 6, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-1,1), "Financing deficit/Net Assets vs BAAFFM", 6, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-1,1), "Financing deficit/Net Assets vs KCFSI", 6, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-0.25,0.25), "Gross LT debt issued/Net Assets vs USREC", 7, 5, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-0.25,0.25), "Gross LT debt issued/Net Assets vs BAAFFM", 7, 31, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-0.25,0.25), "Gross LT debt issued/Net Assets vs KCFSI", 7, 25, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-0.5,0.5), "Net LT debt issued/Net Assets vs USREC", 8, 5, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-0.5,0.5), "Net LT debt issued/Net Assets vs BAAFFM", 8, 15, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-0.5,0.5), "Net LT debt issued/Net Assets vs KCFSI", 8, 12, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-0.1,0.1), "Net Equity issued/Net Assets vs USREC", 9, 10, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-0.1,0.1), "Net Equity issued/Net Assets vs BAAFFM", 9, 62, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-0.1,0.1), "Net Equity issued/Net Assets vs KCFSI", 9, 50, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Net external financing/Net Assets vs USREC", 10, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-1,1), "Net external financing/Net Assets vs BAAFFM", 10, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data, c(-1,1), "Net external financing/Net Assets vs KCFSI", 10, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data,  c(-2,2), "Total debt/book capitalization vs USREC", 11, 1, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds, c(-2,2), "Total debt/book capitalization vs BAAFFM", 11, 6, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data,  c(-2,2), "Total debt/book capitalization vs KCFSI", 11, 5, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-1,1), "Tangibility vs USREC", 12, 2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-1,1), "Tangibility vs BAAFFM", 12, 12, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data,  c(-1,1), "Tangibility vs KCFSI", 12, 10, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-3,3), "Market/book assets vs USREC", 13, 1, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-3,3), "Market/book assets vs BAAFFM", 13, 3, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data,  c(-3,3), "Market/book assets vs KCFSI", 13, 2, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-10,10), "Log Sales vs USREC", 14, 0.2, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-10,10), "Log Sales vs BAAFFM", 14, 1.2, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data,  c(-10,10), "Log Sales vs KCFSI", 14, 1, "KCFSI")
+boxplot_indicators(table_10, NBER_Rec_data, c(-0.5,0.5), "Profitability vs USREC", 15, 5, "USREC")
+boxplot_indicators(table_10, BAA_CP_bonds,c(-0.5,0.5), "Profitability vs BAAFFM", 15, 15, "BAAFFM")
+boxplot_indicators(table_10, KCFSI_data,  c(-0.5,0.5), "Profitability vs KCFSI", 15, 12, "KCFSI")
+dev.off()
+```
